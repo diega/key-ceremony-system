@@ -1,0 +1,63 @@
+name: Checks
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: ${{ matrix.system }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            system: x86_64-linux
+          - runner: macos-15
+            system: aarch64-darwin
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31.11.3
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
+        with:
+          use-gha-cache: enabled
+          use-flakehub: disabled
+          diagnostic-endpoint: ""
+      - name: Fetch locked inputs for offline evaluation tests
+        run: nix flake archive --json > /dev/null
+      - name: Shell, backup compatibility and mocked flash checks
+        run: >-
+          nix build --no-link
+          .#checks.${{ matrix.system }}.scripts
+          .#checks.${{ matrix.system }}.backup-layout
+          .#checks.${{ matrix.system }}.flash-preflight
+      - name: Configuration and security policy regression checks
+        run: python3 tests/validate.py
+      - name: Full ceremony through SSH, USB and local keyboard
+        if: matrix.system == 'x86_64-linux'
+        run: |
+          test -r /dev/kvm
+          test -w /dev/kvm
+          nix build -L .#checks.x86_64-linux.ceremony --option extra-system-features 'nixos-test kvm' -o result-ceremony
+          cat result-ceremony/ceremony-report.json
+      - name: Build operator apps with public fixtures
+        if: matrix.system == 'aarch64-darwin'
+        run: >-
+          nix build --no-link --override-input vault-config path:./tests/fixture-config
+          .#flash .#vault .#publish

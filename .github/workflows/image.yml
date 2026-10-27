@@ -1,0 +1,52 @@
+name: Image integrity
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    name: ${{ matrix.platform }} images
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: pi1
+            check: image-pi1
+            rehearsal-check: image-pi1-rehearsal
+          - platform: pi3
+            check: image
+            rehearsal-check: image-rehearsal
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Release unused hosted-runner SDKs
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: cachix/install-nix-action@v31.11.3
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            max-jobs = 2
+            cores = 2
+            min-free = 2147483648
+            max-free = 4294967296
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
+        with:
+          use-gha-cache: enabled
+          use-flakehub: disabled
+          diagnostic-endpoint: ""
+      - name: Build and inspect the production image with public fixtures
+        run: nix build -L .#checks.aarch64-linux.${{ matrix.check }} -o result-image-check
+      - name: Build and inspect the rehearsal image with public fixtures
+        run: nix build -L .#checks.aarch64-linux.${{ matrix.rehearsal-check }} -o result-rehearsal-check
+      - name: Report image integrity and size
+        run: cat result-image-check/report.json result-rehearsal-check/report.json

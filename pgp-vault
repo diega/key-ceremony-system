@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Only adapt local configuration and command shortcuts to the Nix CLI.
+set -euo pipefail
+cd "$(dirname "$0")"
+command="${1:?usage: ./pgp-vault flash/vault/publish/build/eval [arguments...]}"; shift
+case "$command" in
+  flash|vault|publish) set -- run ".#$command" -- "$@" ;;
+  build|eval) set -- "$command" "$@" ;;
+  *) echo "unknown command: $command" >&2; exit 2 ;;
+esac
+config="${PGP_VAULT_CONFIG:-$PWD/config.nix}"
+[ -f "$config" ] || { echo "Run: cp config.nix.example config.nix; then edit its public settings (missing: $config)." >&2; exit 1; }
+work="$(cd "$(mktemp -d)" && pwd -P)"
+trap 'rm -rf "$work"' EXIT
+cp "$config" "$work/default.nix"
+action="$1"; shift
+nix "$action" --override-input vault-config "path:$work" "$@"

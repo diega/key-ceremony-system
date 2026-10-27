@@ -1,0 +1,7 @@
+# Public settings only. Never put passphrases or private keys in this file:
+# Nix copies it to the world-readable store. Edit before building or flashing.
+{
+  fingerprint = null; # Uppercase, 40 hex characters: gpg --fingerprint YOUR_KEY
+  uidName = null; # e.g. "Alex Example", used by add-uid
+  sshPublicKey = null; # One SSH public key, e.g. gpg --export-ssh-key AUTH_SUBKEY_ID
+}

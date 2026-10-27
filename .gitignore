@@ -1,0 +1,8 @@
+result*
+.local/
+known_hosts
+yubikey.pub
+pubkey-*.asc
+__pycache__/
+/config.nix
+.DS_Store
